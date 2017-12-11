@@ -1,16 +1,16 @@
 class Transformation
 
-  def initialize(hpxml_file_path, type, debug=false)
+  def initialize(input_file_path, type, debug=false)
     @debug=debug
     if type.downcase == 'hpxml'
       @typerb = 'hpxml.rb'
-      require_relative @typerb
-      @object = eval("HPXMLTransformation").new(hpxml_file_path)
+      class_name = 'HPXMLTransformation'
     elsif type.downcase == 'ekotrope'
       @typerb = 'ekotrope.rb'
-      require_relative @typerb
-      @object = eval("EkotropeTransformation").new(hpxml_file_path)
+      class_name = 'EkotropeTransformation'
     end
+    require_relative @typerb
+    @object = eval(class_name).new(input_file_path)
   end
   
   def self.AGWallUo(location, uo_value)
@@ -59,6 +59,8 @@ class Transformation
   def self.WriteFile(out_path)
     # Needs to be implemented by inherited class
   end
+  
+  private
 
   def method_missing(*args)
     method_name = args[0]

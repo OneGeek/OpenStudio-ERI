@@ -1,11 +1,9 @@
-require_relative 'base.rb'
+class HPXMLTransformation
 
-class HPXMLTransformation < Transformation
-
-  def initialize(hpxml_file_path)
+  def initialize(input_file_path)
     require 'rexml/document'
     require 'rexml/xpath'
-    @hpxml_doc = REXML::Document.new(File.read(hpxml_file_path))
+    @hpxml_doc = REXML::Document.new(File.read(input_file_path))
   end
 
   def AGWallUo(location, uo_value)

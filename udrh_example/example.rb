@@ -23,7 +23,6 @@ def run_ruleset(input, output, type)
 end
 
 
-
 # CLI arguments
 require 'optparse'
 options = {}
