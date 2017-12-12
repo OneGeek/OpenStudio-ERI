@@ -866,17 +866,6 @@ class EnergyRatingIndex301Ruleset
     
     (m) For a Rated Home without a cooling system, an electric air conditioner with the efficiency provided in 
     Table 4.2.2(1a) shall be assumed for both the HERS Reference Home and the Rated Home.
-    
-    4.3.4. Air Source Heat Pumps. For heat pumps and air conditioners where
-    a detailed, hourly HVAC simulation is used to separately model the 
-    compressor and evaporator energy (including part-load performance), the 
-    back-up heating energy, the distribution fan or blower energy and crank 
-    case heating energy, the Manufacturers Equipment Performance Rating 
-    (HSPF and SEER) shall be modified as follows to represent the performance
-    of the compressor and evaporator components alone: HSPF, corr = HSPF, mfg / 0.582
-    and SEER, corr = SEER, mfg / 0.941. The energy uses of all components 
-    (i.e. compressor and distribution fan/blower; and crank case heater) shall 
-    then be added together to obtain the total energy uses for heating and cooling.
     '''
     
     prevent_hp_and_ac = true # TODO: Eventually allow this...
@@ -971,7 +960,6 @@ class EnergyRatingIndex301Ruleset
       XMLHelper.add_element(cool_eff, "Units", "SEER")
       XMLHelper.add_element(cool_eff, "Value", seer)
       extension = XMLHelper.add_element(cool_sys, "extension")
-      XMLHelper.add_element(extension, "PerformanceAdjustmentSEER", 1.0/0.941) # TODO: Do we really want to apply this?
       XMLHelper.add_element(extension, "NumberSpeeds", "1-Speed")
       
     end
@@ -999,10 +987,6 @@ class EnergyRatingIndex301Ruleset
       XMLHelper.add_element(heat_eff, "Units", "HSPF")
       XMLHelper.add_element(heat_eff, "Value", hspf)
       extension = XMLHelper.add_element(heat_pump, "extension")
-      XMLHelper.add_element(extension, "PerformanceAdjustmentHSPF", 1.0/0.582) # TODO: Do we really want to apply this?
-      if prevent_hp_and_ac
-        XMLHelper.add_element(extension, "PerformanceAdjustmentSEER", 1.0/0.941) # TODO: Do we really want to apply this?
-      end
       XMLHelper.add_element(extension, "NumberSpeeds", "1-Speed")
       
     end
@@ -1065,17 +1049,6 @@ class EnergyRatingIndex301Ruleset
     
     (m) For a Rated Home without a cooling system, an electric air conditioner with the efficiency provided in 
     Table 4.2.2(1a) shall be assumed for both the HERS Reference Home and the Rated Home.
-    
-    4.3.4. Air Source Heat Pumps. For heat pumps and air conditioners where
-    a detailed, hourly HVAC simulation is used to separately model the 
-    compressor and evaporator energy (including part-load performance), the 
-    back-up heating energy, the distribution fan or blower energy and crank 
-    case heating energy, the Manufacturers Equipment Performance Rating 
-    (HSPF and SEER) shall be modified as follows to represent the performance
-    of the compressor and evaporator components alone: HSPF, corr = HSPF, mfg / 0.582
-    and SEER, corr = SEER, mfg / 0.941. The energy uses of all components 
-    (i.e. compressor and distribution fan/blower; and crank case heater) shall 
-    then be added together to obtain the total energy uses for heating and cooling.
     '''
     
     heating_system = orig_details.elements["Systems/HVAC/HVACPlant/HeatingSystem"]
@@ -1137,12 +1110,6 @@ class EnergyRatingIndex301Ruleset
       
       # Retain cooling system
       cooling_system = XMLHelper.copy_element(new_hvac_plant, orig_details, "Systems/HVAC/HVACPlant/CoolingSystem")
-      extension = cooling_system.elements["extension"]
-      if extension.nil?
-        extension = XMLHelper.add_element(cooling_system, "extension")
-      end
-      XMLHelper.delete_element(extension, "PerformanceAdjustmentSEER")
-      XMLHelper.add_element(extension, "PerformanceAdjustmentSEER", 1.0/0.941) # TODO: Do we really want to apply this?
       
     elsif cool_type == "AirConditioner"
       
@@ -1162,7 +1129,6 @@ class EnergyRatingIndex301Ruleset
       XMLHelper.add_element(cool_eff, "Units", "SEER")
       XMLHelper.add_element(cool_eff, "Value", seer)
       extension = XMLHelper.add_element(cooling_system, "extension")
-      XMLHelper.add_element(extension, "PerformanceAdjustmentSEER", 1.0/0.941) # TODO: Do we really want to apply this?
       XMLHelper.add_element(extension, "NumberSpeeds", "1-Speed")
       
     end
@@ -1172,16 +1138,6 @@ class EnergyRatingIndex301Ruleset
     
       # Retain heating system
       heat_pump_system = XMLHelper.copy_element(new_hvac_plant, orig_details, "Systems/HVAC/HVACPlant/HeatPump")
-      extension = heat_pump_system.elements["extension"]
-      if extension.nil?
-        extension = XMLHelper.add_element(heat_pump_system, "extension")
-      end
-      if not heat_pump_system.elements["AnnualCoolEfficiency"].nil?
-        XMLHelper.delete_element(extension, "PerformanceAdjustmentSEER")
-        XMLHelper.add_element(extension, "PerformanceAdjustmentSEER", 1.0/0.941) # TODO: Do we really want to apply this?
-      end
-      XMLHelper.delete_element(extension, "PerformanceAdjustmentHSPF")
-      XMLHelper.add_element(extension, "PerformanceAdjustmentHSPF", 1.0/0.582) # TODO: Do we really want to apply this?
       
     elsif heat_type == "HeatPump"
     
@@ -1200,7 +1156,6 @@ class EnergyRatingIndex301Ruleset
       XMLHelper.add_element(heat_eff, "Units", "HSPF")
       XMLHelper.add_element(heat_eff, "Value", hspf)
       extension = XMLHelper.add_element(heat_pump, "extension")
-      XMLHelper.add_element(extension, "PerformanceAdjustmentHSPF", 1.0/0.582) # TODO: Do we really want to apply this?
       XMLHelper.add_element(extension, "NumberSpeeds", "1-Speed")
       
     end

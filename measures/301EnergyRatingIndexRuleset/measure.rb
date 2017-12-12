@@ -1592,9 +1592,7 @@ class OSMeasures
     
     if clg_type == "central air conditioning"
     
-      seer_nom = Float(XMLHelper.get_value(clgsys, "AnnualCoolingEfficiency[Units='SEER']/Value"))
-      seer_adj = Float(XMLHelper.get_value(clgsys, "extension/PerformanceAdjustmentSEER"))
-      seer = seer_nom * seer_adj
+      seer = Float(XMLHelper.get_value(clgsys, "AnnualCoolingEfficiency[Units='SEER']/Value"))
       num_speeds = XMLHelper.get_value(clgsys, "extension/NumberSpeeds")
       crankcase_kw = 0.0
       crankcase_temp = 55.0
@@ -1604,7 +1602,7 @@ class OSMeasures
         measure_subdir = "ResidentialHVACCentralAirConditionerSingleSpeed"
         args = {
                 "seer"=>seer,
-                "eer"=>0.82 * seer_nom + 0.64,       
+                "eer"=>0.82 * seer + 0.64,       
                 "shr"=>0.73,
                 "fan_power_rated"=>0.365,
                 "fan_power_installed"=>0.5,
@@ -1625,8 +1623,8 @@ class OSMeasures
         measure_subdir = "ResidentialHVACCentralAirConditionerTwoSpeed"
         args = {
                 "seer"=>seer,
-                "eer"=>0.83 * seer_nom + 0.15,
-                "eer2"=>0.56 * seer_nom + 3.57,
+                "eer"=>0.83 * seer + 0.15,
+                "eer2"=>0.56 * seer + 3.57,
                 "shr"=>0.71,
                 "shr2"=>0.73,
                 "capacity_ratio"=>0.72,
@@ -1652,10 +1650,10 @@ class OSMeasures
         measure_subdir = "ResidentialHVACCentralAirConditionerVariableSpeed"
         args = {
                 "seer"=>seer,
-                "eer"=>0.80 * seer_nom,
-                "eer2"=>0.75 * seer_nom,
-                "eer3"=>0.65 * seer_nom,
-                "eer4"=>0.60 * seer_nom,
+                "eer"=>0.80 * seer,
+                "eer2"=>0.75 * seer,
+                "eer3"=>0.65 * seer,
+                "eer4"=>0.60 * seer,
                 "shr"=>0.98,
                 "shr2"=>0.82,
                 "shr3"=>0.745,
@@ -1731,18 +1729,13 @@ class OSMeasures
     if hp_type == "air-to-air"        
     
       if not hp.elements["AnnualCoolEfficiency"].nil?
-        seer_nom = Float(XMLHelper.get_value(hp, "AnnualCoolEfficiency[Units='SEER']/Value"))
-        seer_adj = Float(XMLHelper.get_value(hp, "extension/PerformanceAdjustmentSEER"))
+        seer = Float(XMLHelper.get_value(hp, "AnnualCoolEfficiency[Units='SEER']/Value"))
       else
         # FIXME: Currently getting from AC
         clgsys = building.elements["BuildingDetails/Systems/HVAC/HVACPlant/CoolingSystem"]
-        seer_nom = Float(XMLHelper.get_value(clgsys, "AnnualCoolingEfficiency[Units='SEER']/Value"))
-        seer_adj = Float(XMLHelper.get_value(clgsys, "extension/PerformanceAdjustmentSEER"))
+        seer = Float(XMLHelper.get_value(clgsys, "AnnualCoolingEfficiency[Units='SEER']/Value"))
       end
-      seer = seer_nom * seer_adj
-      hspf_nom = Float(XMLHelper.get_value(hp, "AnnualHeatEfficiency[Units='HSPF']/Value"))
-      hspf_adj = Float(XMLHelper.get_value(hp, "extension/PerformanceAdjustmentHSPF"))
-      hspf = hspf_nom * hspf_adj
+      hspf = Float(XMLHelper.get_value(hp, "AnnualHeatEfficiency[Units='HSPF']/Value"))
       
       crankcase_kw = 0.02
       crankcase_temp = 55.0
@@ -1753,8 +1746,8 @@ class OSMeasures
         args = {
                 "seer"=>seer,
                 "hspf"=>hspf,
-                "eer"=>0.80 * seer_nom + 1.0,
-                "cop"=>0.45 * seer_nom - 0.34,
+                "eer"=>0.80 * seer + 1.0,
+                "cop"=>0.45 * seer - 0.34,
                 "shr"=>0.73,
                 "fan_power_rated"=>0.365,
                 "fan_power_installed"=>0.5,
@@ -1784,10 +1777,10 @@ class OSMeasures
         args = {
                 "seer"=>seer,
                 "hspf"=>hspf,
-                "eer"=>0.78 * seer_nom + 0.6,
-                "eer2"=>0.68 * seer_nom + 1.0,
-                "cop"=>0.60 * seer_nom - 1.40,
-                "cop2"=>0.50 * seer_nom - 0.94,
+                "eer"=>0.78 * seer + 0.6,
+                "eer2"=>0.68 * seer + 1.0,
+                "cop"=>0.60 * seer - 1.40,
+                "cop2"=>0.50 * seer - 0.94,
                 "shr"=>0.71,
                 "shr2"=>0.724,
                 "capacity_ratio"=>0.72,
@@ -1823,14 +1816,14 @@ class OSMeasures
         args = {
                 "seer"=>seer,
                 "hspf"=>hspf,
-                "eer"=>0.80 * seer_nom,
-                "eer2"=>0.75 * seer_nom,
-                "eer3"=>0.65 * seer_nom,
-                "eer4"=>0.60 * seer_nom,
-                "cop"=>0.48 * seer_nom,
-                "cop2"=>0.45 * seer_nom,
-                "cop3"=>0.39 * seer_nom,
-                "cop4"=>0.39 * seer_nom,                  
+                "eer"=>0.80 * seer,
+                "eer2"=>0.75 * seer,
+                "eer3"=>0.65 * seer,
+                "eer4"=>0.60 * seer,
+                "cop"=>0.48 * seer,
+                "cop2"=>0.45 * seer,
+                "cop3"=>0.39 * seer,
+                "cop4"=>0.39 * seer,                  
                 "shr"=>0.84,
                 "shr2"=>0.79,
                 "shr3"=>0.76,
@@ -1876,12 +1869,8 @@ class OSMeasures
       
     elsif hp_type == "mini-split"
       
-      seer_nom = Float(XMLHelper.get_value(hp, "AnnualCoolEfficiency[Units='SEER']/Value"))
-      seer_adj = Float(XMLHelper.get_value(hp, "extension/PerformanceAdjustmentSEER"))
-      seer = seer_nom * seer_adj
-      hspf_nom = Float(XMLHelper.get_value(hp, "AnnualHeatEfficiency[Units='HSPF']/Value"))
-      hspf_adj = Float(XMLHelper.get_value(hp, "extension/PerformanceAdjustmentHSPF"))
-      hspf = hspf_nom * hspf_adj
+      seer = Float(XMLHelper.get_value(hp, "AnnualCoolEfficiency[Units='SEER']/Value"))
+      hspf = Float(XMLHelper.get_value(hp, "AnnualHeatEfficiency[Units='HSPF']/Value"))
       
       measure_subdir = "ResidentialHVACMiniSplitHeatPump"
       args = {
