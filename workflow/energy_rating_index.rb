@@ -11,7 +11,6 @@ require_relative "../measures/301EnergyRatingIndexRuleset/resources/xmlhelper"
 require_relative "../measures/301EnergyRatingIndexRuleset/resources/util"
 require_relative "../measures/301EnergyRatingIndexRuleset/resources/unit_conversions"
 
-# TODO: Rake task to package ERI
 # TODO: Add error-checking
 # TODO: Add standardized reporting of errors
 
@@ -33,7 +32,7 @@ def recreate_path(path)
   end
   Dir.mkdir(path)
 end
-      
+
 def create_osw(design, basedir, resultsdir, options)
 
   design_str = design.gsub(' ','')
@@ -256,26 +255,6 @@ def parse_sql(design, sql_path, output_hpxml_path)
   
 end
 
-def get_cfa(hpxml_doc)
-  cfa = XMLHelper.get_value(hpxml_doc, "/HPXML/Building/BuildingDetails/BuildingSummary/BuildingConstruction/ConditionedFloorArea")
-  
-  if cfa.nil?
-    fail "ERROR: Conditioned floor area not found."
-  end
-  
-  return cfa.to_f
-end
-
-def get_nbr(hpxml_doc)
-  nbr = XMLHelper.get_value(hpxml_doc, "/HPXML/Building/BuildingDetails/BuildingSummary/BuildingConstruction/NumberofBedrooms")
-  
-  if nbr.nil?
-    fail "ERROR: Number of bedrooms not found."
-  end
-  
-  return nbr.to_i
-end
-
 def get_heating_fuel(hpxml_doc)
   heat_fuel = nil
   
@@ -427,7 +406,292 @@ def dhw_adjustment(hpxml_doc)
   return Float(XMLHelper.get_value(hwdist, "extension/EnergyConsumptionAdjustmentFactor"))
 end
 
-def calculate_eri(sim_outputs)
+def verify_user_inputs(rated_hpxml_doc, ref_hpxml_doc, resultsdir)
+
+  # User Input Verification Requirements
+  msgs = []
+  has_error = false
+  
+  rated_building = rated_hpxml_doc.elements["/HPXML/Building"]
+  ref_building = ref_hpxml_doc.elements["/HPXML/Building"]
+  
+  cfa = Float(XMLHelper.get_value(rated_building, "BuildingDetails/BuildingSummary/BuildingConstruction/ConditionedFloorArea"))
+  nbeds = Float(XMLHelper.get_value(rated_building, "BuildingDetails/BuildingSummary/BuildingConstruction/NumberofBedrooms"))
+  
+  msgs, has_error = verify_user_inputs_building(rated_building, msgs, has_error, cfa, nbeds)
+  msgs, has_error = verify_user_inputs_mech_vent(rated_building, msgs, has_error)
+  msgs, has_error = verify_user_inputs_appliances(rated_building, ref_building, msgs, has_error, nbeds)
+  
+  verification_log = File.join(resultsdir, "verification.log")
+  File.write(verification_log, msgs.join("\n"))
+  
+  if has_error
+    fail "User input verification requirements failed. See #{verification_log} for details."
+  end
+  
+  return cfa, nbeds
+end
+
+def verify_user_inputs_building(rated_building, msgs, has_error, cfa, nbeds)
+
+  rated_construction = rated_building.elements["BuildingDetails/BuildingSummary/BuildingConstruction"]
+  rated_enclosure = rated_building.elements["BuildingDetails/Enclosure"]
+
+  # Number of bedrooms | <= (CFA-120) / 70 | Error
+  if nbeds > (cfa - 120.0) / 70.0
+    msgs << "ERROR: Number of bedrooms (#{nbeds}) is not within limits."
+    has_error = true
+  end
+  
+  # Stories above grade | 1 <= SAG < =4 | Warning
+  nstories_ag = Integer(XMLHelper.get_value(rated_construction, "NumberofConditionedFloorsAboveGrade"))
+  if nstories_ag < 1 or nstories_ag > 4
+    msgs << "WARNING: Stories above grade (#{nstories_ag}) is not within limits."
+  end
+  
+  # Average ceiling height | 7 <= (Volume / CFA) <= 15 | Warning
+  cvolume = Float(XMLHelper.get_value(rated_construction, "ConditionedBuildingVolume"))
+  avg_ceil_height = cvolume / cfa
+  if avg_ceil_height < 7 or avg_ceil_height > 15
+    msgs << "WARNING: Average ceiling height (#{avg_ceil_height.round(2)}) is not within limits."
+  end
+  
+  rated_enclosure.elements.each("Foundations/Foundation") do |foundation|
+    
+    foundation_type = nil
+    is_conditioned = false
+    if not foundation.elements["FoundationType/Basement"].nil?
+      foundation_type = "Basement"
+      if not foundation.elements["FoundationType/Basement[Conditioned='true']"].nil?
+        is_conditioned = true
+      end
+    elsif not foundation.elements["FoundationType/Crawlspace"].nil?
+      foundation_type = "Crawlspace"
+    elsif not foundation.elements["FoundationType/SlabOnGrade"].nil?
+      foundation_type = "SlabOnGrade"
+    elsif not foundation.elements["FoundationType/Ambient"].nil?
+      foundation_type = "Ambient"
+    else
+      fail "Unexpected foundation type."
+    end
+    
+    # Below grade slab floors | => 1 below grade wall | Warning
+    num_bg_slabs = 0
+    num_bg_walls = 0
+    foundation.elements.each("Slab") do |foundation_slab|
+      if Float(XMLHelper.get_value(foundation_slab, "DepthBelowGrade")) > 0
+        num_bg_slabs += 1
+      end
+    end
+    foundation.elements.each("FoundationWall") do |foundation_wall|
+      if Float(XMLHelper.get_value(foundation_wall, "BelowGradeDepth")) > 0
+        num_bg_walls += 1
+      end
+    end
+    if num_bg_slabs > 0 and num_bg_walls < 1
+      msgs << "WARNING: Has below grade slab floors but number of below grade walls (#{num_bg_walls}) is not within limits."
+    end
+    
+    # Below grade walls | => 1 below grade slab floor | Warning
+    if num_bg_walls > 0 and num_bg_slabs < 1
+      msgs << "WARNING: Has below grade walls but number of below grade slab floors (#{num_bg_slabs}) is not within limits."
+    end
+    
+    if foundation_type != "Ambient"
+      # Foundation perimeter (ft) | 1 <= perimeter <= (EFA^0.5 * 7) | Warning
+      foundation_perim = Float(XMLHelper.get_value(foundation, "Slab/ExposedPerimeter"))
+      foundation_efa = Float(XMLHelper.get_value(foundation, "Slab/Area"))
+      if foundation_perim < 1 or foundation_perim > (foundation_efa**0.5 * 7.0)
+        msgs << "WARNING: #{foundation_type} perimeter (#{foundation_perim.round(2)} ft) is not within limits."
+      end
+    end
+    
+    if foundation_type == "Basement" or foundation_type == "Crawlspace"
+    
+      # Foundation wall height (ft) | 0 < height <= 20 | Warning
+      foundation.elements.each("FoundationWall") do |foundation_wall|
+        foundation_wall_height = Float(XMLHelper.get_value(foundation_wall, "Height"))
+        if foundation_wall_height <= 0 or foundation_wall_height > 20
+          msgs << "WARNING: Foundation wall height (#{foundation_wall_height.round(2)} ft) is not within limits."
+        end
+      end
+      
+      if foundation_type == "Basement"
+        foundation.elements.each("FoundationWall") do |foundation_wall|
+          # Basement wall depth (ft) | 2 <= depth <= (wall height – 0.5) | Warning
+          basement_wall_depth = Float(XMLHelper.get_value(foundation_wall, "BelowGradeDepth"))
+          foundation_wall_height = Float(XMLHelper.get_value(foundation_wall, "Height"))
+          if basement_wall_depth < 2 or basement_wall_depth > (foundation_wall_height - 0.5)
+            msgs << "WARNING: Basement wall depth (#{basement_wall_depth.round(2)} ft) is not within limits."
+          end
+        end
+      end
+      
+      if not (foundation_type == "Basement" and is_conditioned)
+        # Uncond. foundation space | => 1 floor above foundation space | Error
+        floors = 0
+        foundation.elements.each("FrameFloor") do |floor|
+          floors += 1
+        end
+        if floors < 1
+          msgs << "ERROR: Uncond. foundation space floors above is not within limits."
+          has_error = true
+        end
+      end
+      
+    end
+  end
+  
+  # TODO Enclosure floor area | <= enclosure ceiling area | Warning
+  
+  # TODO Enclosure floor area | <= conditioned floor area | Error
+  
+  # TODO Enclosure gross wall area | 27 <= (EGWA / (CFA*NCS)^0.5) <= 105 | Warning
+  
+  # Above grade gross wall area | >= door area + window area | Error
+  ag_gross_wall_area = 0.0
+  rated_enclosure.elements.each("Walls/Wall") do |wall|
+    ag_gross_wall_area += Float(XMLHelper.get_value(wall, "Area"))
+  end
+  rated_enclosure.elements.each("AtticAndRoof/Attics/Attic/Walls/Wall") do |wall|
+    ag_gross_wall_area += Float(XMLHelper.get_value(wall, "Area"))
+  end
+  door_area = 0.0
+  rated_enclosure.elements.each("Doors/Door") do |door|
+    door_area += Float(XMLHelper.get_value(door, "Area"))
+  end
+  window_area = 0.0
+  rated_enclosure.elements.each("Windows/Window") do |window|
+    window_area += Float(XMLHelper.get_value(window, "Area"))
+  end
+  if ag_gross_wall_area < door_area + window_area
+    msgs << "ERROR: Above grade gross wall area (#{ag_gross_wall_area.round(2)} ft^2) is not within limits."
+    has_error = true
+  end
+  
+  # TODO Rating date | <= current date | Error
+  
+  return msgs, has_error
+end
+
+def verify_user_inputs_mech_vent(rated_building, msgs, has_error)
+
+  # Gather inputs
+  mv = rated_building.elements["BuildingDetails/Systems/MechanicalVentilation/VentilationFans/VentilationFan[UsedForWholeBuildingVentilation='true']"]
+  return msgs, has_error if mv.nil?
+  
+  mv_type = XMLHelper.get_value(mv, "FanType")
+  mv_fan_power = Float(XMLHelper.get_value(mv, "FanPower"))
+  mv_flow_rate = Float(XMLHelper.get_value(mv, "RatedFlowRate"))
+  mv_hours = Float(XMLHelper.get_value(mv, "HoursInOperation"))
+  
+  mv_w_cfm = mv_fan_power / mv_flow_rate * mv_hours / 24.0
+  mv_cfm = mv_flow_rate * mv_hours / 24.0
+  
+  if mv_type == 'exhaust only'
+    # Exhaust | => 0.12 W/cfm | n/a | => 0.12 W/cfm
+    if mv_w_cfm < 0.12
+      msgs << "WARNING: Mechanical ventilation (#{mv_w_cfm.round(3)} W/cfm) is not within limits."
+    end
+    
+  elsif mv_type == 'supply only'
+    # Supply | n/a | => 0.12 W/cfm | => 0.12 W/cfm
+    if mv_w_cfm < 0.12
+      msgs << "WARNING: Mechanical ventilation (#{mv_w_cfm.round(3)} W/cfm) is not within limits."
+    end
+    
+  elsif mv_type == 'balanced'
+    # Balanced | => 0.12 W/cfm | => 0.12 W/cfm | => 0.24 W/cfm
+    if mv_w_cfm < 0.24 # FIXME: need to adjust for # fans?
+      msgs << "WARNING: Mechanical ventilation (#{mv_w_cfm.round(3)} W/cfm) is not within limits."
+    end
+    
+  elsif mv_type == 'energy recovery ventilator'
+    # ERV | n/a | n/a | => 0.48 W/cfm
+    if mv_w_cfm < 0.48 # FIXME: need to adjust for # fans?
+      msgs << "WARNING: Mechanical ventilation (#{mv_w_cfm.round(3)} W/cfm) is not within limits."
+    end
+    
+  elsif mv_type == 'central fan integrated supply'
+    # TODO CFIS PSC motor (SEER <= 13; AFUE <= 90%) | => 0.48 W/cfm
+    # TODO CFIS ECM motor (SEER => 15; AFUE => 92%) | => 0.36 W/cfm
+  
+  end
+  
+  # TODO For the purposes of calculating the impacts of whole-house ventilation systems 
+  # in the Rated Home, accredited software tools shall ensure that the time-averaged 
+  # ventilation rate is equal to or greater than the minimum allowed by Section 4.2, 
+  # ANSI/RESNET 301-2014, regardless of the user’s entry
+  # For example, if the whole house ventilation fan requirement is 50 cfm continuous 
+  # and the whole house ventilation system is intermittent with a 33% duty cycle 
+  # (typical of a fan cycler system), the ventilation rate during the 33% duty cycle 
+  # must be 150 cfm for the Rated Home calculations. Software users can be warned of 
+  # this requirement (and its implementation in the software) but shall not be allowed 
+  # to override it.
+
+  return msgs, has_error
+end
+
+def verify_user_inputs_appliances(rated_building, ref_building, msgs, has_error, nbeds)
+
+  rated_appliances = rated_building.elements["BuildingDetails/Appliances"]
+  rated_waterheating = rated_building.elements["BuildingDetails/Systems/WaterHeating"]
+  ref_appliances = ref_building.elements["BuildingDetails/Appliances"]
+  ref_waterheating = ref_building.elements["BuildingDetails/Systems/WaterHeating"]
+  
+  # Gather inputs
+  cw_kwh = Float(XMLHelper.get_value(rated_appliances, "ClothesWasher/extension/AnnualkWh"))
+  cf_fuel = XMLHelper.get_value(rated_appliances, "ClothesDryer/FuelType")
+  cd_kwh = Float(XMLHelper.get_value(rated_appliances, "ClothesDryer/extension/AnnualkWh"))
+  cd_therm = Float(XMLHelper.get_value(rated_appliances, "ClothesDryer/extension/AnnualTherm"))
+  dw_gpd = Float(XMLHelper.get_value(rated_appliances, "Dishwasher/extension/HotWaterGPD"))
+  cw_gpd = Float(XMLHelper.get_value(rated_appliances, "ClothesWasher/extension/HotWaterGPD"))
+  w_gpd = Float(XMLHelper.get_value(rated_waterheating, "HotWaterDistribution/extension/MixedWaterGPD"))
+  f_gpd = Float(XMLHelper.get_value(rated_waterheating, "WaterFixture[WaterFixtureType='shower head']/extension/MixedWaterGPD"))
+  f_mix = Float(XMLHelper.get_value(rated_waterheating, "WaterHeatingSystem/extension/Fmix"))
+  ref_dw_gpd = Float(XMLHelper.get_value(ref_appliances, "Dishwasher/extension/HotWaterGPD"))
+  ref_cw_gpd = Float(XMLHelper.get_value(ref_appliances, "ClothesWasher/extension/HotWaterGPD"))
+  ref_w_gpd = Float(XMLHelper.get_value(ref_waterheating, "HotWaterDistribution/extension/MixedWaterGPD"))
+  ref_f_gpd = Float(XMLHelper.get_value(ref_waterheating, "WaterFixture[WaterFixtureType='shower head']/extension/MixedWaterGPD"))
+  ref_f_mix = Float(XMLHelper.get_value(ref_waterheating, "WaterHeatingSystem/extension/Fmix"))
+
+  # Clothes washers (kWh/y) | (21*Nbr + 73) > CWkWh > (4.7*Nbr + 16.4) | Warning
+  if cw_kwh <= (4.7 * nbeds + 16.4) or cw_kwh >= (21.0 * nbeds + 73.0)
+    msgs << "WARNING: Clothes washers (#{cd_kwh.round(2)} kWh/y) is not within limits."
+  end
+  
+  if cf_fuel == "electricity"
+    # Electric dryers (kWh/y) | (163*Nbr + 577) > eCDkWh > (55*Nbr + 194) | Warning
+    if cd_kwh <= (55.0 * nbeds + 194.0) or cd_kwh >= (163.0 * nbeds + 577.0)
+      msgs << "WARNING: Electric dryers (#{cd_kwh.round(2)} kWh/y) is not within limits."
+    end
+    
+  else
+    # Gas dryers (therms/y) | (5.9*Nbr + 20.6) > gCDtherms > (2.0*Nbr + 6.9) | Warning
+    if cd_therm <= (2.0 * nbeds + 6.9) or cd_therm >= (5.9 * nbeds + 20.6)
+      msgs << "WARNING: Gas dryers (#{cd_therm.round(2)} therms/y) is not within limits."
+    end
+    
+    # Gas dryers (kWh/y) | (12.9*Nbr + 45.5) > gCDkWh > (4.3*Nbr + 15.3) | Warning
+    if cd_kwh <= (4.3 * nbeds + 15.3) or cd_kwh >= (12.9 * nbeds + 45.5)
+      msgs << "WARNING: Gas dryers (#{cd_kwh.round(2)} kWh/y) is not within limits."
+    end
+  end
+  
+  # Hot water savings (gpd) | HWgpdSave < (0.59*Nbr +2.1) | Warning
+  ref_hw_gpd = ref_dw_gpd + ref_cw_gpd + ref_f_mix * (ref_f_gpd + ref_w_gpd)
+  hw_gpd = dw_gpd + cw_gpd + f_mix * (f_gpd + w_gpd)
+  hw_gpd_save = ref_hw_gpd - hw_gpd
+  msgs << "DEBUG: ref_dw_gpd #{ref_dw_gpd} ref_cw_gpd #{ref_cw_gpd} ref_f_gpd #{ref_f_mix * ref_f_gpd} ref_w_gpd #{ref_f_mix * ref_w_gpd}"
+  msgs << "DEBUG: dw_gpd #{dw_gpd} cw_gpd #{cw_gpd} f_gpd #{f_mix * f_gpd} w_gpd #{f_mix * w_gpd}"
+  if hw_gpd_save >= (0.59 * nbeds + 2.1)
+    msgs << "WARNING: Hot water savings (#{hw_gpd_save.round(2)} gpd) is not within limits."
+  end
+
+  return msgs, has_error
+end
+
+def calculate_eri(sim_outputs, resultsdir)
 
   rated_output = sim_outputs[Constants.CalcTypeERIRatedHome]
   ref_output = sim_outputs[Constants.CalcTypeERIReferenceHome]
@@ -435,8 +699,9 @@ def calculate_eri(sim_outputs)
   ref_hpxml_doc = REXML::Document.new(File.read(ref_output[:hpxml]))
   
   results = {}
-  results[:cfa] = get_cfa(rated_hpxml_doc)
-  results[:nbr] = get_nbr(rated_hpxml_doc)
+  
+  # Verify user inputs before producing ERI
+  results[:cfa], results[:nbr] = verify_user_inputs(rated_hpxml_doc, ref_hpxml_doc, resultsdir)
   
   # REUL = Reference Home End Use Loads (for heating, cooling or hot water) as computed using an Approved 
   # Software Rating Tool.
@@ -751,8 +1016,9 @@ recreate_path(resultsdir)
 # Run simulations
 sim_outputs = {}
 puts "HPXML: #{options[:hpxml]}"
+
 Parallel.map(designs, in_threads: designs.size) do |design|
-  # Use print instead of puts in here (see https://stackoverflow.com/a/5044669)
+  # Use print instead of puts here (see https://stackoverflow.com/a/5044669)
   
   print "[#{design}] Running workflow...\n"
   osw_path, output_hpxml_path = create_osw(design, basedir, resultsdir, options)
@@ -766,7 +1032,7 @@ end
 
 # Calculate and write results
 puts "Calculating ERI..."
-results = calculate_eri(sim_outputs)
+results = calculate_eri(sim_outputs, resultsdir)
 
 puts "Writing output files..."
 write_results(results, resultsdir, sim_outputs)

@@ -433,38 +433,54 @@
       </Systems>
       <Appliances>
         <ClothesWasher>
-          <SystemIdentifier id='ClothesWasher_ID1'/>
-          <ModifiedEnergyFactor>1.2</ModifiedEnergyFactor>
-          <RatedAnnualkWh>387.0</RatedAnnualkWh>
-          <LabelElectricRate>0.127</LabelElectricRate>
-          <LabelGasRate>1.003</LabelGasRate>
-          <LabelAnnualGasCost>24.0</LabelAnnualGasCost>
-          <Capacity>3.5</Capacity>
+          <SystemIdentifier id='ClothesWasher'/>
+          <extension>
+            <AnnualkWh>78.0</AnnualkWh>
+            <FracSensible>0.27291304079435075</FracSensible>
+            <FracLatent>0.03154271325763853</FracLatent>
+            <HotWaterGPD>4.484343212524908</HotWaterGPD>
+          </extension>
         </ClothesWasher>
         <ClothesDryer>
-          <SystemIdentifier id='ClothesDryer_ID1'/>
+          <SystemIdentifier id='ClothesDryer'/>
           <FuelType>natural gas</FuelType>
-          <EfficiencyFactor>3.01</EfficiencyFactor>
-          <ControlType>timer</ControlType>
+          <extension>
+            <AnnualkWh>87.8</AnnualkWh>
+            <AnnualTherm>40.0</AnnualTherm>
+            <FracSensible>0.13361984043844605</FracSensible>
+            <FracLatent>0.016553919241103544</FracLatent>
+          </extension>
         </ClothesDryer>
         <Dishwasher>
-          <SystemIdentifier id='Dishwasher_ID1'/>
-          <RatedAnnualkWh>100</RatedAnnualkWh>
-          <PlaceSettingCapacity>12</PlaceSettingCapacity>
+          <SystemIdentifier id='Dishwasher'/>
+          <extension>
+            <AnnualkWh>202.0</AnnualkWh>
+            <FracSensible>0.30026001647273387</FracSensible>
+            <FracLatent>0.30026001647273387</FracLatent>
+            <HotWaterGPD>5.097205479452055</HotWaterGPD>
+          </extension>
         </Dishwasher>
         <Refrigerator>
-          <SystemIdentifier id='Refrigerator_ID1'/>
-          <RatedAnnualkWh>609</RatedAnnualkWh>
+          <SystemIdentifier id='Refrigerator'/>
+          <RatedAnnualkWh>709.0</RatedAnnualkWh>
+          <extension>
+            <FracSensible>1.0</FracSensible>
+            <FracLatent>0.0</FracLatent>
+          </extension>
         </Refrigerator>
         <CookingRange>
-          <SystemIdentifier id='Range_ID1'/>
+          <SystemIdentifier id='CookingRange'/>
           <FuelType>natural gas</FuelType>
-          <IsInduction>false</IsInduction>
+          <extension>
+            <AnnualkWh>33.400000000000006</AnnualkWh>
+            <AnnualTherm>33.400000000000006</AnnualTherm>
+            <FracSensible>0.6380694828912528</FracSensible>
+            <FracLatent>0.16200074814049195</FracLatent>
+          </extension>
         </CookingRange>
         <Oven>
-          <SystemIdentifier id='Oven_ID1'/>
+          <SystemIdentifier id='Oven'/>
           <FuelType>natural gas</FuelType>
-          <IsConvection>false</IsConvection>
         </Oven>
       </Appliances>
       <Lighting>

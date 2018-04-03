@@ -1421,6 +1421,8 @@ class EnergyRatingIndex301Ruleset
     
     wh_ef, wh_re = get_water_heater_ef_and_re(wh_fuel_type, wh_tank_vol)
     wh_cap = Waterheater.calc_capacity(Constants.Auto, to_beopt_fuel(wh_fuel_type), @nbeds, @nbaths) * 1000.0 # Btuh
+    wh_set = 125.0
+    f_mix = get_hot_water_f_mix(wh_set)
     
     # New water heater
     new_wh_sys = XMLHelper.add_element(new_water_heating, "WaterHeatingSystem")
@@ -1435,9 +1437,10 @@ class EnergyRatingIndex301Ruleset
     if not wh_re.nil?
       XMLHelper.add_element(new_wh_sys, "RecoveryEfficiency", wh_re)
     end
-    XMLHelper.add_element(new_wh_sys, "HotWaterTemperature", 125)
+    XMLHelper.add_element(new_wh_sys, "HotWaterTemperature", wh_set)
     extension = XMLHelper.add_element(new_wh_sys, "extension")
     XMLHelper.add_element(extension, "PerformanceAdjustmentEnergyFactor", 1.0)
+    XMLHelper.add_element(extension, "Fmix", f_mix)
     
     '''
     ANSI/RESNET 301-2014 Addendum A-2015
@@ -1513,6 +1516,10 @@ class EnergyRatingIndex301Ruleset
     
     orig_wh_sys = orig_details.elements["Systems/WaterHeating/WaterHeatingSystem"]
     
+    wh_set = 125.0
+    f_mix = get_hot_water_f_mix(wh_set)
+    
+    extension = nil
     if not orig_wh_sys.nil?
       
       # New water heater
@@ -1525,7 +1532,7 @@ class EnergyRatingIndex301Ruleset
       XMLHelper.copy_element(new_wh_sys, orig_wh_sys, "HeatingCapacity")
       XMLHelper.copy_element(new_wh_sys, orig_wh_sys, "EnergyFactor")
       XMLHelper.copy_element(new_wh_sys, orig_wh_sys, "RecoveryEfficiency")
-      XMLHelper.add_element(new_wh_sys, "HotWaterTemperature", 125)
+      XMLHelper.add_element(new_wh_sys, "HotWaterTemperature", wh_set)
       extension = XMLHelper.add_element(new_wh_sys, "extension")
       if XMLHelper.get_value(new_wh_sys, "WaterHeaterType") == 'instantaneous water heater'
         XMLHelper.add_element(extension, "PerformanceAdjustmentEnergyFactor", 0.92)
@@ -1556,11 +1563,13 @@ class EnergyRatingIndex301Ruleset
       if not wh_re.nil?
         XMLHelper.add_element(new_wh_sys, "RecoveryEfficiency", wh_re)
       end
-      XMLHelper.add_element(new_wh_sys, "HotWaterTemperature", 125)
+      XMLHelper.add_element(new_wh_sys, "HotWaterTemperature", wh_set)
       extension = XMLHelper.add_element(new_wh_sys, "extension")
       XMLHelper.add_element(extension, "PerformanceAdjustmentEnergyFactor", 1.0)
       
     end
+    
+    XMLHelper.add_element(extension, "Fmix", f_mix)
     
     '''
     ANSI/RESNET 301-2014 Addendum A-2015
@@ -2375,6 +2384,11 @@ class EnergyRatingIndex301Ruleset
     else
       return nil
     end
+  end
+  
+  def self.get_hot_water_f_mix(t_set)
+    t_mains = @weather.data.MainsDailyTemps.inject(0, :+) / 365.0
+    return 1.0 - ((t_set - 105.0) / (t_set - t_mains))
   end
   
   def self.get_pipe_length_reference(bsmnt)

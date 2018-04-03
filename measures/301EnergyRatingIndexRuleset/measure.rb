@@ -65,7 +65,7 @@ class EnergyRatingIndex301 < OpenStudio::Measure::ModelMeasure
     arg.setDescription("Absolute path of the hpxml schemas.")
     args << arg
     
-    arg = OpenStudio::Measure::OSArgument.makeStringArgument("hpxml_output_file_path", false)
+    arg = OpenStudio::Measure::OSArgument.makeStringArgument("hpxml_output_file_path", true)
     arg.setDisplayName("HPXML Output File Path")
     arg.setDescription("Absolute (or relative) path of the output HPXML file.")
     args << arg
@@ -97,7 +97,7 @@ class EnergyRatingIndex301 < OpenStudio::Measure::ModelMeasure
     calc_type = runner.getStringArgumentValue("calc_type", user_arguments)
     hpxml_file_path = runner.getStringArgumentValue("hpxml_file_path", user_arguments)
     schemas_dir = runner.getOptionalStringArgumentValue("schemas_dir", user_arguments)
-    hpxml_output_file_path = runner.getOptionalStringArgumentValue("hpxml_output_file_path", user_arguments)
+    hpxml_output_file_path = runner.getStringArgumentValue("hpxml_output_file_path", user_arguments)
     osm_output_file_path = runner.getOptionalStringArgumentValue("osm_output_file_path", user_arguments)
     debug = runner.getBoolArgumentValue("debug", user_arguments)
 
@@ -124,15 +124,6 @@ class EnergyRatingIndex301 < OpenStudio::Measure::ModelMeasure
     
     hpxml_doc = REXML::Document.new(File.read(hpxml_file_path))
     
-    show_measure_calls = false
-    apply_measures_osw1 = nil
-    apply_measures_osw2 = nil
-    if debug
-      show_measure_calls = true
-      apply_measures_osw1 = "apply_measures1.osw"
-      apply_measures_osw2 = "apply_measures2.osw"
-    end
-    
     # Validate input HPXML against schema
     if not schemas_dir.nil?
       has_errors = false
@@ -158,8 +149,7 @@ class EnergyRatingIndex301 < OpenStudio::Measure::ModelMeasure
     end
     runner.registerInfo("Validated input HPXML against ERI Use Case.")
     
-    workflow_json = File.join(File.dirname(__FILE__), "resources", "measure-info.json")
-    
+    # Apply Location to obtain weather data
     epw_path = XMLHelper.get_value(hpxml_doc, "/HPXML/Building/BuildingDetails/ClimateandRiskZones/WeatherStation/extension/EPWFileName")
     unless (Pathname.new epw_path).absolute?
       epw_path = File.expand_path(File.join(File.dirname(hpxml_file_path), epw_path))
@@ -168,17 +158,13 @@ class EnergyRatingIndex301 < OpenStudio::Measure::ModelMeasure
       runner.registerError("'#{epw_path}' does not exist or is not an .epw file.")
       return false
     end
-    
-    # Apply Location to obtain weather data
     success, weather = Location.apply(model, runner, epw_path, "NA", "NA")
     return false if not success
     
     # Apply 301 ruleset on HPXML object
     EnergyRatingIndex301Ruleset.apply_ruleset(hpxml_doc, calc_type, weather)
-    if hpxml_output_file_path.is_initialized
-      XMLHelper.write_file(hpxml_doc, hpxml_output_file_path.get)
-      runner.registerInfo("Wrote file: #{hpxml_output_file_path.get}")
-    end
+    XMLHelper.write_file(hpxml_doc, hpxml_output_file_path)
+    runner.registerInfo("Wrote file: #{hpxml_output_file_path}")
     unless errors.empty?
       return false
     end
@@ -342,13 +328,6 @@ class OSModel
   
   def self.add_geometry_envelope(runner, model, building, weather)
   
-    avg_ceil_hgt = building.elements["BuildingDetails/BuildingSummary/BuildingConstruction/AverageCeilingHeight"]
-    if avg_ceil_hgt.nil?
-      avg_ceil_hgt = 8.0
-    else
-      avg_ceil_hgt = Float(avg_ceil_hgt.text)
-    end
-    
     spaces = create_all_spaces_and_zones(model, building)
     return false if spaces.empty?
     
@@ -366,7 +345,7 @@ class OSModel
     success = add_foundations(runner, model, building, spaces, fenestration_areas, unit) # TODO: Don't need to pass unit once slab hvac sizing is updated
     return false if not success
     
-    success = add_above_grade_walls(runner, model, building, avg_ceil_hgt, spaces, fenestration_areas)
+    success = add_above_grade_walls(runner, model, building, spaces, fenestration_areas)
     return false if not success
     
     success = add_attic_floors(runner, model, building, spaces)
@@ -417,7 +396,7 @@ class OSModel
       end
     end
     
-    # Conditioned living
+    # Conditioned living (zone includes conditioned attic)
     thermal_zones.each do |thermal_zone|
       if Geometry.is_living(thermal_zone)
         zones_updated += 1
@@ -1122,8 +1101,12 @@ class OSModel
     return true
   end
 
-  def self.add_above_grade_walls(runner, model, building, avg_ceil_hgt, spaces, fenestration_areas)
+  def self.add_above_grade_walls(runner, model, building, spaces, fenestration_areas)
 
+    cvolume = Float(XMLHelper.get_value(building, "BuildingDetails/BuildingSummary/BuildingConstruction/ConditionedBuildingVolume"))
+    cfa = Float(XMLHelper.get_value(building, "BuildingDetails/BuildingSummary/BuildingConstruction/ConditionedFloorArea"))
+    avg_ceil_ht = cvolume / cfa
+  
     building.elements.each("BuildingDetails/Enclosure/Walls/Wall") do |wall|
     
       interior_adjacent_to = wall.elements["extension/InteriorAdjacentTo"].text
@@ -1133,7 +1116,7 @@ class OSModel
       
       wall_gross_area = Float(wall.elements["Area"].text)
       wall_net_area = net_wall_area(wall_gross_area, fenestration_areas, wall_id)
-      wall_height = avg_ceil_hgt
+      wall_height = avg_ceil_ht
       wall_length = wall_net_area / wall_height
       z_origin = 0
 

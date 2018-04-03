@@ -13,7 +13,7 @@ class EnergyRatingIndexTest < MiniTest::Test
     parent_dir = File.absolute_path(File.join(File.dirname(__FILE__), ".."))
     xmldir = "#{parent_dir}/sample_files"
     Dir["#{xmldir}/valid*.xml"].each do |xml|
-      run_and_check(xml, parent_dir)
+      run_and_check(xml, parent_dir, true)
     end
   end
   
@@ -38,13 +38,13 @@ class EnergyRatingIndexTest < MiniTest::Test
       test_num += 1
       
       # Run test
-      ref_hpxml, rated_hpxml, ref_osm, rated_osm, results_csv = run_and_check(xml, parent_dir)
+      ref_hpxml, rated_hpxml, ref_osm, rated_osm, results_csv = run_and_check(xml, parent_dir, true, 0)
       _check_reference_home_components(ref_hpxml, ref_osm, test_num)
       
       # Re-simulate reference HPXML file
       FileUtils.cp(ref_hpxml, xmldir)
       ref_hpxml = "#{xmldir}/#{File.basename(ref_hpxml)}"
-      ref_hpxml2, rated_hpxml2, ref_osm2, rated_osm2, results_csv2 = run_and_check(ref_hpxml, parent_dir)
+      ref_hpxml2, rated_hpxml2, ref_osm2, rated_osm2, results_csv2 = run_and_check(ref_hpxml, parent_dir, true, 0)
       _check_e_ratio(results_csv2)
     end
   end
@@ -55,7 +55,7 @@ class EnergyRatingIndexTest < MiniTest::Test
     xmldir = "#{parent_dir}/sample_files/RESNET_Tests/4.3_Test_HERS_Method"
     Dir["#{xmldir}/*.xml"].each do |xml|
       test_num += 1
-      ref_hpxml, rated_hpxml, ref_osm, rated_osm, results_csv = run_and_check(xml, parent_dir)
+      ref_hpxml, rated_hpxml, ref_osm, rated_osm, results_csv = run_and_check(xml, parent_dir, true, 0)
       _check_method_results(results_csv, test_num)
     end
   end
@@ -82,7 +82,13 @@ class EnergyRatingIndexTest < MiniTest::Test
     Dir["#{xmldir}/*.xml"].each do |xml|
       test_num += 1
       
-      ref_hpxml, rated_hpxml, ref_osm, rated_osm, results_csv = run_and_check(xml, parent_dir)
+      expect_num_warnings = 0
+      if test_num == 5 or test_num == 6 or test_num == 12 or test_num == 13
+        # TODO: Is this correct?
+        expect_num_warnings = 1
+      end
+      
+      ref_hpxml, rated_hpxml, ref_osm, rated_osm, results_csv = run_and_check(xml, parent_dir, true, expect_num_warnings)
       
       base_val = nil
       if [2,3].include? test_num
@@ -118,7 +124,8 @@ class EnergyRatingIndexTest < MiniTest::Test
 
   private
   
-  def run_and_check(xml, parent_dir, expect_valid=true)
+  def run_and_check(xml, parent_dir, expect_valid, expect_num_warnings=nil)
+  
     # Check input HPXML is valid
     xml = File.absolute_path(xml)
     _test_schema_validation(parent_dir, xml, expect_valid)
@@ -139,16 +146,23 @@ class EnergyRatingIndexTest < MiniTest::Test
     rated_osm = File.join(parent_dir, "results", "HERSRatedHome.osm")
     results_csv = File.join(parent_dir, "results", "ERI_Results.csv")
     worksheet_csv = File.join(parent_dir, "results", "ERI_Worksheet.csv")
+    verification_log = File.join(parent_dir, "results", "verification.log")
     assert(File.exists?(ref_hpxml))
     assert(File.exists?(ref_osm))
     assert(File.exists?(rated_hpxml))
     assert(File.exists?(rated_osm))
     assert(File.exists?(results_csv))
     assert(File.exists?(worksheet_csv))
+    assert(File.exists?(verification_log))
     
     # Check Reference/Rated HPXMLs are valid
     _test_schema_validation(parent_dir, ref_hpxml)
     _test_schema_validation(parent_dir, rated_hpxml)
+    
+    # Check verification log
+    if not expect_num_warnings.nil?
+      _test_verification_log(verification_log, expect_num_warnings)
+    end
   
     return ref_hpxml, rated_hpxml, ref_osm, rated_osm, results_csv
   end
@@ -164,9 +178,23 @@ class EnergyRatingIndexTest < MiniTest::Test
     if expect_valid
       assert_equal(errors.size, 0)
     else
-      assert(errors.size > 0)
+      assert_operator(errors.size, :>, 0)
       assert(errors[0].to_s.include? "Element '{http://hpxmlonline.com/2014/6}Building': Missing child element(s). Expected is ( {http://hpxmlonline.com/2014/6}BuildingDetails")
     end
+  end
+  
+  def _test_verification_log(verification_log, expect_num_warnings)
+    num_warnings = 0
+    num_errors = 0
+    File.readlines(verification_log).each do |line|
+      if line.downcase.start_with? "warning"
+        num_warnings += 1
+      elsif line.downcase.start_with? "error"
+        num_errors += 1
+      end
+    end
+    assert_equal(num_warnings, expect_num_warnings)
+    assert_equal(num_errors, 0)
   end
   
   def _check_reference_home_components(ref_hpxml, ref_osm, test_num)
