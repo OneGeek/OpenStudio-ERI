@@ -398,9 +398,10 @@
           <WaterHeatingSystem>
             <SystemIdentifier id='DHW_ID1'/>
             <FuelType>electricity</FuelType>
-            <WaterHeaterType>instantaneous water heater</WaterHeaterType>
+            <WaterHeaterType>storage water heater</WaterHeaterType>
+            <TankVolume>40</TankVolume>
             <FractionDHWLoadServed>1</FractionDHWLoadServed>
-            <EnergyFactor>0.99</EnergyFactor>
+            <EnergyFactor>0.95</EnergyFactor>
           </WaterHeatingSystem>
           <HotWaterDistribution>
             <SystemIdentifier id='HWDist_ID1'/>
@@ -416,12 +417,12 @@
           <WaterFixture>
             <SystemIdentifier id='WF_ID1'/>
             <WaterFixtureType>shower head</WaterFixtureType>
-            <FlowRate>2.5</FlowRate>
+            <FlowRate>2.0</FlowRate>
           </WaterFixture>
           <WaterFixture>
             <SystemIdentifier id='WF_ID2'/>
             <WaterFixtureType>faucet</WaterFixtureType>
-            <FlowRate>2.5</FlowRate>
+            <FlowRate>2.0</FlowRate>
           </WaterFixture>
         </WaterHeating>
       </Systems>

@@ -208,8 +208,8 @@
                 </Layer>
                 <Layer>
                   <InstallationType>continuous</InstallationType>
-                  <NominalRValue>19</NominalRValue>
-                  <Thickness>5</Thickness>
+                  <NominalRValue>0</NominalRValue>
+                  <Thickness>0</Thickness>
                 </Layer>
               </Insulation>
               <extension>
@@ -476,7 +476,7 @@
           <WaterFixture>
             <SystemIdentifier id='WF_ID1'/>
             <WaterFixtureType>shower head</WaterFixtureType>
-            <FlowRate>1.5</FlowRate>
+            <FlowRate>2.5</FlowRate>
           </WaterFixture>
           <WaterFixture>
             <SystemIdentifier id='WF_ID2'/>

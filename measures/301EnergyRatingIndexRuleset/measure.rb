@@ -813,6 +813,7 @@ class OSModel
         elsif foundation_type.elements["Crawlspace"]
           surface.setSpace(spaces[Constants.SpaceTypeCrawl])
         elsif foundation_type.elements["SlabOnGrade"]
+          # TODO: Could be garage
           surface.setSpace(spaces[Constants.SpaceTypeLiving])
         else
           fail "Unhandled foundation type #{foundation_type}."
